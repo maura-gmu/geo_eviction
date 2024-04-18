@@ -1,9 +1,10 @@
+
 # Mesa and Mesa Geo
 import mesa
 import mesa_geo as mg
 import numpy as np
 from shapely.geometry import Point
-from model_prep import ward_sf, patches, households_gdf, renter_proptypes, owner_proptypes, unemployment_table, zip_housing_prices, rental_res, condo_coop, sfr
+#from model_prep import ward_sf, patches, households_gdf, renter_proptypes, owner_proptypes, unemployment_table, zip_housing_prices, rental_res, condo_coop, sfr
 
 
 
@@ -29,7 +30,6 @@ class WardAgent(mg.GeoAgent):
         self.unemployment_rate = 0.0
         self.num_parcels = 0
         self.mean_housing = 0
-        #print(f'Ward {self.unique_id} starts with mean housing costs of {self.mean_housing}') # good
 
 
 class PropAgent(mg.GeoAgent):
@@ -57,7 +57,6 @@ class EvictionSpace(mg.GeoSpace):
         _id_ward_map (Dict[str, WardAgent]): A dictionary mapping ward IDs to WardAgent instances.
         num_households (int): Total number of households in the DC wards.
     """
-    _id_ward_map = Dict[str, WardAgent]
     num_households = int
     num_parcels = int
 
@@ -127,7 +126,6 @@ class EvictionModel(mesa.Model):
         self.landlord_income = 0
         self.schedule = mesa.time.RandomActivation(self)
         self.space = EvictionSpace()
-        #print(f"self.space.crs is {self.space.crs} and total bounds are {self.space.total_bounds}")
         self.leniency = leniency # scale
         self.moratorium = moratorium # switch
         self.housing_perc_income = housing_perc_income # scale
@@ -227,7 +225,7 @@ class EvictionModel(mesa.Model):
                         break
 
         
-        households = [ agent for agent in self.schedule.agents if isinstance(agent, HouseholdAgent) ]            
+                 
         valued_parcels = []
         for parcel in parcels:
             # Initially you need all households to help set the values of the properties
@@ -266,23 +264,17 @@ class EvictionModel(mesa.Model):
                     
 
         demographic_counts = {}
-        total_wh = sum(1 for household in households if household.race == 1)
-        total_blk = sum(1 for household in households if household.race == 2)
-        total_asn = sum(1 for household in households if household.race == 3)
-        total_oth = sum(1 for household in households if household.race == 4)
-        total_Latino = sum(1 for household in households if household.latino == 2)
-        total_nonLatino = sum(1 for household in households if household.latino == 1)
-
+        households = [agent for agent in self.schedule.agents if isinstance(agent, HouseholdAgent)]
+        self.total_households = sum(1 for household in households)
         for ward in wards:
             ## Add parcels to the ward in the Space Object
             self.space.add_parcels_to_ward(ward_parcels[ward.unique_id], ward)
             # Update num_properties and add parcels to the respective ward
 
-            ward_households = [household for household in assigned_households if household.ward_id == ward.unique_id]
+            ward_households = [household for household in households if household.ward_id == ward.unique_id]
             ward.num_households = len(ward_households)
             ward.mean_housing = np.mean([household.budget for household in ward_households])
-            #print(f'There are {ward.num_households} households in ward {ward.unique_id}')
-            #print(f'The mean housing cost for ward {ward.unique_id} is {ward.mean_housing}')
+
             wh_count = sum(1 for household in ward_households if household.race == 1)
             blk_count = sum(1 for household in ward_households if household.race == 2)
             asn_count = sum(1 for household in ward_households if household.race == 3)
@@ -299,11 +291,66 @@ class EvictionModel(mesa.Model):
                 "Latino" : Lat_count,
                 "Non Latino" : nonLat_count
                 }
-        
             demographic_counts[ward.unique_id] = ward_counts
-            self.schedule.add(ward)
 
+            
+            self.schedule.add(ward)
+      
+        self.total_wh = sum(1 for household in households if household.race == 1)
+        self.white_homeless = 0
         
+        self.total_blk = sum(1 for household in households if household.race == 2)
+        self.black_homeless = 0
+        self.total_asn = sum(1 for household in households if household.race == 3)
+        self.asian_homeless = 0
+        self.total_oth = sum(1 for household in households if household.race == 4)
+        self.other_homeless = 0
+        self.total_Latino = sum(1 for household in households if household.latino == 2)
+        self.latino_homeless = 0
+
+        self.total_nonLatino = sum(1 for household in households if household.latino == 1)
+        self.nonlatino_homeless = 0
+        self.demographic_counts = demographic_counts
+        self.index_dissim(demographic_counts)
+        self.datacollector = mesa.DataCollector(
+            # Model-level reporters
+            {"Current month" : "month", 
+             "Landlord's income" : "landlord_income",
+             "Missing Payments" : "missed_payments",
+             "% DC Households now Homeless" : "perc_homeless",
+             "% White Population Homeless" : "white_homeless",
+             "% Black Population Homeless" : "black_homeless",
+             "% Asian Population Homeless" : "asian_homeless",
+             "% Latino Population Homeless" : "latino_homeless",
+             "% non Latino Population Homeless" : "nonlatino_homeless",
+             "% Other Population Homeless" : "other_homeless",
+             "white-black dissimilarity index" : "white_black_dissimilarity",
+             "white_asian_dissimilarity index" : "white_asian_dissimilarity",
+             "white_other_dissimilarity index" : "white_other_dissimilarity",
+             "black_asian_dissimilarity index" : "black_asian_dissimilarity",
+             "black_other_dissimilarity index" : "black_other_dissimilarity",
+             "asian_other_dissimilarity index" : "asian_other_dissimilarity",
+             "latino_dissimilarity index " : "latino_dissimilarity",
+             "Household Location": lambda agent: agent.geometry if isinstance(agent, HouseholdAgent) else None,
+             "Household Ward": lambda agent: agent.ward_id if isinstance(agent, HouseholdAgent) else None,
+             "Household Race": lambda agent: agent.race if isinstance(agent, HouseholdAgent) else None,
+             "Household Latino" : lambda agent: agent.Latino if isinstance(agent, HouseholdAgent) else None,
+             "Ward Unemployment_Rate": lambda agent: agent.unemployment_rate if isinstance(agent, WardAgent) else None,
+             "Ward Num Properties": lambda agent: agent.num_parcels if isinstance(agent, WardAgent) else None,
+             "Ward Mean Housing" : lambda agent: agent.mean_housing if isinstance(agent, WardAgent) else None,
+             "Property Value": lambda agent: agent.value if isinstance(agent, PropAgent) else None,
+            }
+            )
+
+    
+    def index_dissim(self, demographic_counts):
+        total_wh = self.total_wh
+        total_blk = self.total_blk
+        total_asn = self.total_asn
+        total_oth = self.total_oth
+        total_Latino = self.total_Latino
+        total_nonLatino = self.total_nonLatino
+
         if total_wh > 0 and total_blk > 0:
             self.wh_blk_dissim = .5 * (
             abs( (demographic_counts[1]['White'] / total_wh) - (demographic_counts[1]['Black'] / total_blk) ) +
@@ -387,88 +434,17 @@ class EvictionModel(mesa.Model):
             abs( (demographic_counts[7]['Latino'] / total_Latino) - (demographic_counts[7]['Non Latino'] / total_nonLatino) ) +
             abs( (demographic_counts[8]['Latino'] / total_Latino) - (demographic_counts[8]['Non Latino'] / total_nonLatino) ) 
             )
-                
-            
-        
-        self.datacollector = mesa.DataCollector(
-            # Model-level reporters
-            {"Current month" : "month", 
-             "Landlord's income" : "landlord_income",
-             "Missing Payments" : "missed_payments",
-             "% DC Households now Homeless" : "perc_homeless",
-             "white-black dissimilarity index" : "white_black_dissimilarity",
-             "white_asian_dissimilarity index" : "white_asian_dissimilarity",
-             "white_other_dissimilarity index" : "white_other_dissimilarity",
-             "black_asian_dissimilarity index" : "black_asian_dissimilarity",
-             "black_other_dissimilarity index" : "black_other_dissimilarity",
-             "asian_other_dissimilarity index" : "asian_other_dissimilarity",
-             "latino_dissimilarity index " : "latino_dissimilarity",
-             "Household Location": lambda agent: agent.geometry if isinstance(agent, HouseholdAgent) else None,
-             "Household Ward": lambda agent: agent.ward_id if isinstance(agent, HouseholdAgent) else None,
-             "Household Race": lambda agent: agent.race if isinstance(agent, HouseholdAgent) else None,
-             "Household Latino" : lambda agent: agent.Latino if isinstance(agent, HouseholdAgent) else None,
-             "Ward Unemployment_Rate": lambda agent: agent.unemployment_rate if isinstance(agent, WardAgent) else None,
-             "Ward Num Properties": lambda agent: agent.num_parcels if isinstance(agent, WardAgent) else None,
-             "Ward Mean Housing" : lambda agent: agent.mean_housing if isinstance(agent, WardAgent) else None,
-             "Property Value": lambda agent: agent.value if isinstance(agent, PropAgent) else None,
-            }
-            )
     
-    @property
-    def white_black_dissimilarity(self):
-        return self.wh_blk_dissim
-    
-    @property
-    def white_asian_dissimilarity(self):
-        return self.wh_asn_dissim
-    
-    @property
-    def white_other_dissimilarity(self):
-        return self.wh_oth_dissim
-    
-    @property
-    def black_asian_dissimilarity(self):
-        return self.blk_asn_dissim
-    
-    @property
-    def black_other_dissimilarity(self):
-        return self.blk_oth_dissim
-    
-    @property
-    def asian_other_dissimilarity(self):
-        return self.asn_oth_dissim
-    
-    @property
-    def latino_dissimilarity(self):
-        return self.lat_dissim
-    
-    
-    @property
-    def homeless(self):
-      return self.perc_homeless
-    
-    @property
-    def show_month(self):
-      return self.month
-        
-    @property 
-    def income(self):
-        #self.landlord_expenses = 0
-        return self.landlord_income  
-    
-    @property 
-    def missing_payments(self):
-        #self.landlord_expenses = 0
-        return self.missed_payments  
-
     def step(self):
         '''
         Execute one step of the model.
 
         '''
-        # Execute one step
+
         self.schedule.step()
-        
+        wards = [agent for agent in self.schedule.agents if isinstance(agent, WardAgent)]
+        households = [agent for agent in self.schedule.agents if isinstance(agent, HouseholdAgent)]
+        properties = [agent for agent in self.schedule.agents if isinstance(agent, PropAgent)]
         if self.moratorium:
             if self.moratorium_expiration_week >= (self.schedule.steps / 2):
                 self.moratorium = False
@@ -478,33 +454,84 @@ class EvictionModel(mesa.Model):
             self.month += 1
             # For each agent, set their unemployment rate for the current month
 
-        [ self.update_rent(agent) for agent in self.schedule.agents if isinstance(agent, PropAgent) ]
-        [ self.unemploy(agent) for agent in self.schedule.agents if isinstance(agent, WardAgent) ]
-        
-        [ self.move(agent) for agent in self.schedule.agents if isinstance(agent, HouseholdAgent) ]
-        [ self.earn_income(agent) for agent in self.schedule.agents if isinstance(agent, HouseholdAgent) and self.schedule.steps % 2 == 0 ]
-        [ self.pay_rent(agent) for agent in self.schedule.agents if isinstance(agent, HouseholdAgent) ]
-        num_homeless = sum(1 for agent in self.schedule.agents if isinstance(agent, HouseholdAgent) and agent.homeless)
-        
-        total_households = sum(1 for agent in self.schedule.agents if isinstance(agent, HouseholdAgent))
-        self.perc_homeless = (num_homeless / total_households) * 100
+        [ self.update_rent(prop) for prop in properties]
+        [ self.unemploy(ward) for ward in wards ]
+        [ self.move(household) for household in households]
+        [ self.earn_income(household) for household in households if self.schedule.steps % 2 == 0 ]
+        [ self.pay_rent(household) for household in households]
+        num_homeless = sum(1 for household in households if household.homeless)
         
         
+        self.perc_homeless = (num_homeless / self.total_households) * 100
         # Collect data
-        self.datacollector.collect(self)
-    
-        
-        self.release_stimulus = False
-        # Stop running if all households become homeless
-        if self.perc_homeless == 100:
-            self.running = False
-        if self.month == 13:
-            self.running = False
+        demographic_counts = self.demographic_counts
+        for ward in wards:
+            ward_households = [household for household in households if household.ward_id == ward.unique_id]
 
+            wh_count = sum(1 for household in ward_households if household.race == 1)
+            blk_count = sum(1 for household in ward_households if household.race == 2)
+            asn_count = sum(1 for household in ward_households if household.race == 3)
+            oth_count = sum(1 for household in ward_households if household.race == 4)
+            Lat_count = sum(1 for household in ward_households if household.latino == 2)
+            nonLat_count = sum(1 for household in ward_households if household.latino == 1)
+            
+            ward_counts = {
+                "White" : wh_count,
+                "Black" : blk_count,
+                "Asian" : asn_count,
+                "Other" : oth_count,
+                "Latino" : Lat_count,
+                "Non Latino" : nonLat_count
+                }
+        
+            demographic_counts[ward.unique_id] = ward_counts
+        
+        
+
+        self.demographic_counts = demographic_counts
+        self.index_dissim(demographic_counts)
+        self.datacollector.collect(self)
+        
+        # Stop running if all households become homeless
+       
+        if self.month == 13 or self.perc_homeless == 100:
+
+            self.total_wh = sum(1 for household in households if household.race == 1)
+            if self.total_wh > 0:
+                self.white_homeless =sum(1 for household in households if household.homeless and household.race == 1) / self.total_wh
+            else: 0
+            
+            self.total_blk = sum(1 for household in households if household.race == 2)
+            if self.total_blk > 0:
+                self.black_homeless = sum(1 for household in households if household.homeless and household.race == 2) / self.total_blk
+            else: 0
+            
+            self.total_asn = sum(1 for household in households if household.race == 3)
+            if self.total_asn > 0:
+                self.asian_homeless = sum(1 for household in households if household.homeless and household.race == 3) / self.total_asn
+            else: 0
+        
+            self.total_oth = sum(1 for household in households if household.race == 4)
+            if self.total_oth > 0:
+                self.other_homeless = sum(1 for household in households if household.homeless and household.race == 4) / self.total_oth
+            else: 0
+            
+            
+            self.total_Latino = sum(1 for household in households if household.latino == 2)
+            if self.total_Latino > 0:
+                self.latino_homeless = sum(1 for household in households if household.homeless and household.latino == 2) / self.total_Latino
+            else: 0
+
+            self.total_nonLatino = sum(1 for household in households if household.latino == 1)
+            if self.total_nonLatino > 0:
+                self.nonlatino_homeless = sum(1 for household in households if household.homeless and household.latino == 2) / self.total_nonLatino
+            else: 0
+            
+            self.running = False
+        self.release_stimulus = False
 
     def move(self, household):
-        #print(f'Search # {household.search}')
-        
+      
         if not household.homeless: # homeless == False
             if household.search >= 2:
                 household.homeless = True
@@ -518,7 +545,6 @@ class EvictionModel(mesa.Model):
             else: # household.search < 2
                 parcels = [parcel for parcel in self.schedule.agents if isinstance(parcel, PropAgent) and parcel.vacancies > 0 and parcel.value <= household.budget]
                 if household.housing_status in [3, 4]: # if household is renter
-                    #print(f'The household is a renter')
                     target_patches = [parcel for parcel in parcels if parcel.PROPTYPE in renter_proptypes ]
                     
 
@@ -666,6 +692,55 @@ class EvictionModel(mesa.Model):
 
         else:
             pass
+
+        
+    
+    @property
+    def white_black_dissimilarity(self):
+        return self.wh_blk_dissim
+    
+    @property
+    def white_asian_dissimilarity(self):
+        return self.wh_asn_dissim
+    
+    @property
+    def white_other_dissimilarity(self):
+        return self.wh_oth_dissim
+    
+    @property
+    def black_asian_dissimilarity(self):
+        return self.blk_asn_dissim
+    
+    @property
+    def black_other_dissimilarity(self):
+        return self.blk_oth_dissim
+    
+    @property
+    def asian_other_dissimilarity(self):
+        return self.asn_oth_dissim
+    
+    @property
+    def latino_dissimilarity(self):
+        return self.lat_dissim
+    
+    
+    @property
+    def homeless(self):
+      return self.perc_homeless
+    
+    @property
+    def show_month(self):
+      return self.month
+        
+    @property 
+    def income(self):
+        #self.landlord_expenses = 0
+        return self.landlord_income  
+    
+    @property 
+    def missing_payments(self):
+        #self.landlord_expenses = 0
+        return self.missed_payments  
     
 
 
