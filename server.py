@@ -73,8 +73,6 @@ def eviction_draw(agent):
         portrayal["layer"] = 2
         
     if isinstance(agent, PropAgent):
-        #portrayal["radius"] = .001
-        #portrayal["shape"] = "circle"
         portrayal["color"] = "Gray"
         portrayal["layer"] = 1
         portrayal["filled"] = False

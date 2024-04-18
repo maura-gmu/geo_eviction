@@ -20,7 +20,7 @@ ward_sf = ward_sf[['WARD_1', 'geometry', 'SHAPE_Area']]
 len(ward_sf)
 
 ## Filtered and Imputed Household Pulse Survey data
-filter_df = pd.read_csv('data/df_filtered_MARCH2024.csv')
+filter_df = pd.read_csv('data/hps_df_filtered_MARCH2024.csv')
 ## Properties
 prop_df = pd.read_csv('data/DC_lots_merged.csv')
 prop_df['Units'].fillna(1, inplace=True)

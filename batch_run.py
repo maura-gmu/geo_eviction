@@ -1,17 +1,11 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Apr 17 13:14:55 2024
 
-@author: MauraLapoff
-"""
 # parameter search
 #from mesa.batchrunner import BatchRunner
 import ray
 ray.shutdown()
 from ray import tune, train
 from model import EvictionModel
-
+from ray.tune.schedulers import HyperBandScheduler
 def run_eviction_experiment(config):
     model = EvictionModel(
          moratorium = config["moratorium"],
@@ -30,7 +24,28 @@ def run_eviction_experiment(config):
     for i in range(28):
         model.step()
     perc_homeless = model.perc_homeless
-    train.report({"perc_homeless" : perc_homeless})
+    month = model.month
+    landlord_income = model.landlord_income
+    missed_payments = model.missed_payments
+    white_black_dissimilarity = model.white_black_dissimilarity
+    white_asian_dissimilarity = model.white_asian_dissimilarity
+    white_other_dissimilarity = model.white_other_dissimilarity
+    black_asian_dissimilarity = model.black_asian_dissimilarity
+    black_other_dissimilarity = model.black_other_dissimilarity
+    asian_other_dissimilarity = model.asian_other_dissimilarity
+    latino_dissimilarity = model.latino_dissimilarity
+    train.report({"perc_homeless" : perc_homeless,
+                  "month" : month, 
+                   "landlord_income" : landlord_income,
+                   "missed_payments" : missed_payments,
+                   "white_black_dissimilarity" : white_black_dissimilarity,
+                   "white_asian_dissimilarity" : white_asian_dissimilarity,
+                   "white_other_dissimilarity" : white_other_dissimilarity,
+                   "black_asian_dissimilarity" : black_asian_dissimilarity,
+                   "black_other_dissimilarity" : black_other_dissimilarity,
+                   "asian_other_dissimilarity" : asian_other_dissimilarity,
+                   "latino_dissimilarity" : latino_dissimilarity
+                  })
  
 # Run experiment
 model_params = {
@@ -43,7 +58,8 @@ model_params = {
     "leniency": tune.grid_search(list(range(1, 6, 1))),
     "initial_occupancy_rate": tune.grid_search(list(range(20, 101, 10))),
     "stimulus_value": tune.grid_search(list(range(500, 2001, 500))),
-    "prop_count": tune.grid_search(list(range(1000, 111423, 1000))),
+    #"prop_count": tune.grid_search(list(range(1000, 111423, 1000))),
+    "prop_count": tune.grid_search([1000]),
     "other_weekly_costs": tune.grid_search(list(range(10, 50, 10))),
 }
 
@@ -55,8 +71,9 @@ analysis = tune.run(
     num_samples=5,
     metric="perc_homeless",  
     mode="min",  # minimize homelessness
-)
+    scheduler = HyperBandScheduler(max_t=100, reduction_factor=3)
 
+)
 best_result = analysis.get_best_trial(metric="perc_homeless", mode="min")
 print("Best parameters to minimize homelessness:", best_result.config)
 print("Lowest rate of homelessness", best_result.last_result)
