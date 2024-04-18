@@ -4,7 +4,7 @@ import mesa
 import mesa_geo as mg
 import numpy as np
 from shapely.geometry import Point
-#from model_prep import ward_sf, patches, households_gdf, renter_proptypes, owner_proptypes, unemployment_table, zip_housing_prices, rental_res, condo_coop, sfr
+from model_prep import ward_sf, patches, households_gdf, renter_proptypes, owner_proptypes, unemployment_table, zip_housing_prices, rental_res, condo_coop, sfr
 
 
 
